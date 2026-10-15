@@ -1,5 +1,6 @@
 from typing import Optional
 import re
+import os
 
 # Commands that should NEVER be executed by the AI agent
 BLOCKED_COMMANDS = [
@@ -94,22 +95,42 @@ def validate_filepath(filepath: str, allowed_base_dirs: Optional[list] = None) -
     """
     Validates a file path to prevent directory traversal and access to sensitive files.
     """
-    if not filepath:
+    if not filepath or not filepath.strip():
         return SandboxResult(False, "Empty filepath")
     
-    # Block directory traversal
-    if ".." in filepath:
+    # Normalize path separators and resolve relative components
+    norm_path = os.path.normpath(filepath.strip()).replace("\\", "/")
+    
+    # Block directory traversal attempts
+    if ".." in filepath or ".." in norm_path:
         return SandboxResult(False, "Directory traversal (..) is not allowed")
     
-    # Block sensitive system files
-    sensitive_paths = [
+    # Canonical resolved path
+    try:
+        resolved = os.path.realpath(filepath.strip()).replace("\\", "/")
+    except Exception:
+        return SandboxResult(False, "Invalid or unresolvable filepath")
+    
+    # Block sensitive system files and directories
+    sensitive_patterns = [
         "/etc/passwd", "/etc/shadow", "/etc/sudoers",
-        "/root/.ssh", "/home/*/.ssh",
-        "C:\\Windows\\System32",
+        "/.ssh/", "/id_rsa", "/id_ed25519",
+        "c:/windows/system32", "c:/windows/syswow64",
         "/proc/", "/sys/",
     ]
-    for sensitive in sensitive_paths:
-        if sensitive.lower() in filepath.lower():
-            return SandboxResult(False, f"Access to '{sensitive}' is blocked for security")
+    for sensitive in sensitive_patterns:
+        if sensitive in norm_path.lower() or sensitive in resolved.lower():
+            return SandboxResult(False, f"Access to sensitive path containing '{sensitive}' is blocked")
+    
+    # If explicit boundary is defined, enforce it
+    if allowed_base_dirs:
+        matched = False
+        for base in allowed_base_dirs:
+            base_resolved = os.path.realpath(base).replace("\\", "/")
+            if resolved == base_resolved or resolved.startswith(base_resolved.rstrip("/") + "/"):
+                matched = True
+                break
+        if not matched:
+            return SandboxResult(False, "Access outside allowed base directories is blocked")
     
     return SandboxResult(True)

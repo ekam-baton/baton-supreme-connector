@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional
 from core.security import verify_api_key
 from core.sandbox import validate_command, validate_filepath
 import asyncio
+import os
 import httpx
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
@@ -81,12 +82,19 @@ async def execute_tool(request: ToolRequest):
 
         elif tool == "read_file":
             filepath = params.get("filepath")
+            if not filepath:
+                raise HTTPException(status_code=400, detail="Missing 'filepath'")
             check = validate_filepath(filepath)
             if not check.allowed:
                 raise HTTPException(status_code=403, detail=check.reason)
             def sync_read():
-                with open(filepath, "r", encoding="utf-8") as f:
-                    return f.read()
+                try:
+                    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                        return f.read()
+                except FileNotFoundError:
+                    raise HTTPException(status_code=404, detail=f"File not found: {filepath}")
+                except Exception as e:
+                    raise HTTPException(status_code=400, detail=f"Failed to read file: {str(e)}")
             content = await asyncio.to_thread(sync_read)
             return {"content": content}
 
@@ -94,14 +102,20 @@ async def execute_tool(request: ToolRequest):
             filepath = params.get("filepath")
             content = params.get("content", "")
             if not filepath:
-                raise ValueError("Missing 'filepath'")
+                raise HTTPException(status_code=400, detail="Missing 'filepath'")
             check = validate_filepath(filepath)
             if not check.allowed:
                 raise HTTPException(status_code=403, detail=check.reason)
             def sync_write():
-                with open(filepath, "w", encoding="utf-8") as f:
-                    f.write(content)
-                return len(content)
+                try:
+                    parent_dir = os.path.dirname(filepath)
+                    if parent_dir:
+                        os.makedirs(parent_dir, exist_ok=True)
+                    with open(filepath, "w", encoding="utf-8") as f:
+                        f.write(content)
+                    return len(content)
+                except Exception as e:
+                    raise HTTPException(status_code=400, detail=f"Failed to write file: {str(e)}")
             bytes_written = await asyncio.to_thread(sync_write)
             return {"status": "success", "filepath": filepath, "bytes_written": bytes_written}
 
