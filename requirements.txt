@@ -8,3 +8,4 @@ slowapi>=0.1.4
 litellm>=1.0.0
 duckduckgo-search>=3.8.5
 beautifulsoup4>=4.12.2
+playwright>=1.40.0
