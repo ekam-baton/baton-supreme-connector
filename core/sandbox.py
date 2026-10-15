@@ -9,7 +9,7 @@ BLOCKED_COMMANDS = [
     r"\brm\s+(-rf?|--recursive)\s+~",  # rm -rf ~
     r"\bmkfs\b",                         # format filesystem
     r"\bdd\s+.*of=/dev/",               # disk destroyer
-    r"\b:(){ :\|:& };:",                # fork bomb
+    r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:",  # fork bomb
     r"\bshutdown\b",                     # shutdown system
     r"\breboot\b",                       # reboot system
     r"\bhalt\b",                         # halt system
